@@ -1,5 +1,8 @@
 import type { ArtifactResourceScope } from "../artifacts/ArtifactResourceScope.js";
-import { DarwinProcessOwnershipInspectionError } from "../process/DarwinProcessRunTokenReader.js";
+import {
+  DarwinProcessOwnershipInspectionError,
+  swiftcCompileTimeoutRecovery,
+} from "../process/DarwinProcessRunTokenReader.js";
 import {
   ProcessOwnershipInspectionCancelled,
   ProcessOwnershipIdentityBatchFailure,
@@ -99,6 +102,8 @@ export const translateNativeCommandFailure = (
             }),
       },
     };
+    const compilerTimeoutMs =
+      compiler?.outcome === "timed_out" ? compiler.timeoutMs : undefined;
     const cancelled = processInspectionCancellationError(
       preparation,
       operation,
@@ -124,7 +129,14 @@ export const translateNativeCommandFailure = (
           })
         : cancellationPrimary && cancelled !== undefined
           ? cancelled
-          : new ProviderAdapterError(IDENTITY.id, operation, options);
+          : compilerTimeoutMs === undefined
+            ? new ProviderAdapterError(IDENTITY.id, operation, options)
+            : new AnalysisTimeoutError(operation, compilerTimeoutMs, {
+                ...options,
+                userMessage: `The macOS process ownership helper compiler reached its REA_SWIFTC_COMPILE_TIMEOUT_MS deadline of ${String(compilerTimeoutMs)} ms.`,
+                remediationAction:
+                  swiftcCompileTimeoutRecovery(compilerTimeoutMs),
+              });
     return retainProcessInspectionCleanup(
       preparation,
       bindCleanup(error),
