@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { presentInputJsonSchema } from "./inputSchemaPresentation.js";
-import { toolContract } from "./toolContracts.js";
+import { schemaSubschemas } from "./jsonSchemaKeywords.js";
+import { TOOL_CONTRACTS, toolContract } from "./toolContracts.js";
 import {
   toolInputSchemaWithMetadata,
   transformAdvertisedInputJsonSchema,
@@ -105,6 +106,51 @@ it.each(["draft-2020-12", "draft-07"] as const)(
       expect(canonical.safeParse({ ...input, symbol }).success).toBe(false);
   },
 );
+
+it("emits no surrogate-range pattern in any advertised tool input schema", () => {
+  // #10348: `localPathStringSchema` used to emit the UTF-16 surrogate range
+  // in 120 places across 95 tools. Scalar-Unicode regex engines cannot
+  // compile that range, so it must stay in runtime `.refine(...)` checks.
+  // Lookaround patterns are a separate class and are not covered here.
+  const problems: string[] = [];
+  const walk = (node: unknown, tool: string, path: string): void => {
+    if (node === null || typeof node !== "object" || Array.isArray(node)) {
+      return;
+    }
+    const schema = node as Readonly<Record<string, unknown>>;
+    const pattern = schema.pattern;
+    if (
+      typeof pattern === "string" &&
+      (pattern.includes("\\uD800") || pattern.includes("\\uDFFF"))
+    )
+      problems.push(`${tool}: ${path}.pattern = ${pattern}`);
+    // Only schema-valued positions are schemas. examples/default/const/enum
+    // hold instance data and stay opaque, even when they have a pattern key.
+    schemaSubschemas(schema, { includeDefinitions: true }).forEach(
+      (child, index) => walk(child, tool, `${path}.subschemas[${index}]`),
+    );
+  };
+  for (const contract of TOOL_CONTRACTS) {
+    const schema = toolInputSchemaWithMetadata(contract)[
+      "~standard"
+    ].jsonSchema.input({ target: "draft-2020-12" });
+    walk(schema, contract.name, contract.name);
+  }
+  // These are instance values, not subschemas, despite using a schema keyword
+  // as a property name. A real JSON Schema may carry such literal input data.
+  walk(
+    {
+      type: "object",
+      examples: [{ pattern: "\\uD800" }],
+      default: { pattern: "\\uDFFF" },
+      const: { pattern: "\\uD800" },
+      enum: [{ pattern: "\\uDFFF" }],
+    },
+    "literal-data fixture",
+    "literal-data fixture",
+  );
+  expect(problems).toEqual([]);
+});
 
 describe("advertised object dependencies", () => {
   it.each([
