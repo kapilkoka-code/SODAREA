@@ -392,6 +392,32 @@ it("distinguishes exact fixed command extents from unmodeled trailing bytes", as
   ]);
 });
 
+it("does not report unmodeled payload limitation for fully decoded linker option commands (#8935)", async () => {
+  const options = Buffer.from("-lz\0");
+  const size = 12 + options.length; // 16 bytes exactly
+  const bytes = Buffer.alloc(size);
+  bytes.writeUInt32LE(0x2d, 0); // LC_LINKER_OPTION
+  bytes.writeUInt32LE(size, 4);
+  bytes.writeUInt32LE(1, 8); // count = 1
+  options.copy(bytes, 12);
+  const image = machoImage({ commands: [bytes] });
+  const binary = await readMachoCommandNames(
+    readerOf(image),
+    image.length,
+    1024,
+    8,
+  );
+  expect(binary.commands[0]?.fullyDecoded).toBe(true);
+  expect(binary.commands[0]?.rawSha256).toBeNull();
+  const projection = projectMachoBinary(binary);
+  expect(projection.commands[0]?.fields).toMatchObject({
+    count: 1,
+    "string #1": "-lz",
+  });
+  expect(projection.commands[0]?.fields).not.toHaveProperty("command_sha256");
+  expect(projection.commandLimitations).toEqual([]);
+});
+
 it("preserves leading UTF-8 BOM characters in names and dependency paths", () => {
   const marker = "\uFEFF";
   const commands = multilineBinary.commands.map((row) => ({
@@ -434,6 +460,30 @@ it("retains fixed-name storage bytes for a fully decoded segment", async () => {
   expect(projection.commands[0]?.fields.segname_storage_hex).toBe(
     Buffer.from(segment.subarray(8, 24)).toString("hex"),
   );
+  expect(projection.commandLimitations).toEqual([]);
+});
+
+it("retains owner storage bytes for a fully decoded note command", async () => {
+  const note = Buffer.alloc(40);
+  note.writeUInt32LE(0x31, 0);
+  note.writeUInt32LE(40, 4);
+  note.write("owner\0suffix", 8);
+  note.writeBigUInt64LE(0x1000n, 24);
+  note.writeBigUInt64LE(0x40n, 32);
+  const image = machoImage({ commands: [note] });
+  const binary = await readMachoCommandNames(
+    readerOf(image),
+    image.length,
+    1024,
+    8,
+  );
+  const projection = projectMachoBinary(binary);
+  expect(binary.commands[0]?.fullyDecoded).toBe(true);
+  expect(projection.commands[0]?.fields.data_owner).toBe("owner");
+  expect(projection.commands[0]?.fields.data_owner_storage_hex).toBe(
+    Buffer.from(note.subarray(8, 24)).toString("hex"),
+  );
+  expect(projection.commands[0]?.fields).not.toHaveProperty("command_sha256");
   expect(projection.commandLimitations).toEqual([]);
 });
 
