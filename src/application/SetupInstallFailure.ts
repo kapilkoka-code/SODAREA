@@ -5,6 +5,7 @@ import {
   type HopperRequestFailure,
 } from "./HopperDownload.js";
 import { HOPPER_LINUX_PRIMARY_FINGERPRINT } from "./HopperReleaseFeed.js";
+import type { HopperLauncherDigestMismatch } from "./HopperReleaseFeed.js";
 import type { LinuxPackageInstallFailure } from "./LinuxHopper.js";
 
 export type SetupFailureCode =
@@ -41,6 +42,8 @@ export type SetupHopperInstallResult =
       readonly remediation: string;
       /** The vendor request whose observed transport failure produced `code`. */
       readonly download?: HopperRequestFailure;
+      /** Release feed launcher digest versus the digest inside the authenticated package. */
+      readonly launcherDigestMismatch?: HopperLauncherDigestMismatch;
     };
 
 export type SetupHopperInstallFailure = Extract<
@@ -70,10 +73,18 @@ export type HopperInstallFailureReason =
   | "cleanup_failed"
   | "copy";
 
+/**
+ * Bidi embeddings, overrides and isolates reorder rendered text around a
+ * version the feed chose, so a release name must not carry them into an
+ * interactive transcript any more than it carries terminal escapes.
+ */
+const BIDI_CONTROLS = /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/gu;
+
 const normalizePackageOutput = (output: string): string =>
   output
     .replace(/\u001b(?:\[[0-9;?]*[ -/]*[@-~]|\([0-9A-Za-z]|[@-Z\\^_])/gu, "")
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/gu, "")
+    .replace(BIDI_CONTROLS, "")
     .replace(/\s+/gu, " ")
     .trim();
 
@@ -124,12 +135,14 @@ export const setupInstallFailure = (
     readonly packageFailure?: LinuxPackageInstallFailure | undefined;
     readonly platform?: NodeJS.Platform;
     readonly download?: HopperRequestFailure | undefined;
+    readonly launcherDigestMismatch?: HopperLauncherDigestMismatch | undefined;
   } = {},
 ): SetupHopperInstallFailure => {
   const failure = stageFailure(
     reason,
     context.packageFailure,
     context.platform ?? "darwin",
+    context.launcherDigestMismatch,
   );
   return context.download === undefined
     ? failure
@@ -140,10 +153,30 @@ export const setupInstallFailure = (
       };
 };
 
+/**
+ * Recovery for a package that authenticated under the pinned publisher key but
+ * whose launcher digest differs from the feed's `main_exe_hash`. The report
+ * suggests the vendor feed is stale; this names the feed release and the two
+ * digests so the user can tell that apart from an untrusted download without
+ * rerunning setup.
+ */
+const launcherDigestMismatchRemediation = ({
+  packageFamily,
+  releaseVersion,
+  declaredSha256,
+  observedSha256,
+}: HopperLauncherDigestMismatch): string =>
+  [
+    `The ${packageFamily} package signature verified under the pinned publisher key, but its Hopper launcher SHA-256 ${observedSha256} differs from main_exe_hash ${declaredSha256} declared by release ${normalizePackageOutput(releaseVersion)};`,
+    "this indicates stale feed metadata rather than a tampered download, so retrying the same release will fail identically.",
+    "Retry setup once the vendor republishes a main_exe_hash that matches the package.",
+  ].join(" ");
+
 const stageFailure = (
   reason: HopperInstallFailureReason,
   packageFailure: LinuxPackageInstallFailure | undefined,
   platform: NodeJS.Platform,
+  launcherDigestMismatch: HopperLauncherDigestMismatch | undefined,
 ): SetupHopperInstallFailure => {
   switch (reason) {
     case "unsupported_host":
@@ -160,12 +193,21 @@ const stageFailure = (
           "The current Hopper release requires a newer macOS version than this Mac runs, so REA did not install it. Update macOS to at least the version the installer detail names, or install a Hopper release that supports this macOS version yourself and set HOPPER_LAUNCHER_PATH to its launcher, then rerun rea setup.",
       };
     case "integrity":
-      return {
-        status: "failed",
-        code: "integrity_mismatch",
-        remediation:
-          "The Hopper download failed integrity verification. Retry setup; if it repeats, update REA before installing.",
-      };
+      return launcherDigestMismatch === undefined
+        ? {
+            status: "failed",
+            code: "integrity_mismatch",
+            remediation:
+              "The Hopper download failed integrity verification. Retry setup; if it repeats, update REA before installing.",
+          }
+        : {
+            status: "failed",
+            code: "integrity_mismatch",
+            remediation: launcherDigestMismatchRemediation(
+              launcherDigestMismatch,
+            ),
+            launcherDigestMismatch,
+          };
     case "authorization_or_package_manager":
       return {
         status: "failed",

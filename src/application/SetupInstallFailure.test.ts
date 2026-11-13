@@ -102,3 +102,90 @@ it.each([
 ] as const)("retains %s as a distinct setup failure", (reason, code) => {
   expect(setupInstallFailure(reason).code).toBe(code);
 });
+
+describe("Linux Hopper launcher digest mismatch", () => {
+  const mismatch = {
+    packageFamily: "rpm",
+    releaseVersion: "2.1.0",
+    declaredSha256: "74b5".padEnd(64, "0"),
+    observedSha256: "b41e".padEnd(64, "0"),
+  } as const;
+
+  it("names the feed and package digests instead of reporting a failed download", () => {
+    const result = setupInstallFailure("integrity", {
+      platform: "linux",
+      launcherDigestMismatch: mismatch,
+    });
+    if (result.status !== "failed") throw new Error("expected failure");
+    expect(result.code).toBe("integrity_mismatch");
+    expect(result.launcherDigestMismatch).toEqual(mismatch);
+    expect(result.remediation).toContain("signature verified");
+    expect(result.remediation).toContain(mismatch.releaseVersion);
+    expect(result.remediation).toContain(mismatch.observedSha256);
+    expect(result.remediation).toContain(mismatch.declaredSha256);
+    expect(result.remediation).toContain("stale feed metadata");
+  });
+
+  it("escapes the feed release version before rendering the remediation", () => {
+    const forged = {
+      ...mismatch,
+      releaseVersion: "2.1.0\r\nrea: hopper is installed\u001b[2K",
+    };
+    const result = setupInstallFailure("integrity", {
+      platform: "linux",
+      launcherDigestMismatch: forged,
+    });
+    if (result.status !== "failed") throw new Error("expected failure");
+    expect(result.launcherDigestMismatch).toEqual(forged);
+    expect(result.remediation).toContain(
+      "release 2.1.0 rea: hopper is installed;",
+    );
+    expect(result.remediation).not.toContain("\r");
+    expect(result.remediation).not.toContain("\u001b");
+  });
+
+  it("strips C1 controls from the rendered release version", () => {
+    // A feed row is an unrestricted string, and the remediation is written
+    // straight to stderr, so a C1 CSI (U+009B) must not reach the terminal
+    // even though the authenticated package itself is valid.
+    const forged = { ...mismatch, releaseVersion: "2.1.0\u009b2K\u009b31m" };
+    const result = setupInstallFailure("integrity", {
+      platform: "linux",
+      launcherDigestMismatch: forged,
+    });
+    if (result.status !== "failed") throw new Error("expected failure");
+    expect(result.launcherDigestMismatch).toEqual(forged);
+    expect(result.remediation).toContain("release 2.1.02K31m;");
+    expect(
+      [...result.remediation].some((c) => c >= "\u0080" && c <= "\u009f"),
+    ).toBe(false);
+  });
+
+  it("strips bidi controls from the rendered release version", () => {
+    // A right-to-left override reorders the text that follows it, so a feed
+    // version carrying one could render a release name that differs from the
+    // value the check compared. The raw fact is still reported unchanged.
+    const forged = { ...mismatch, releaseVersion: "2.1.0\u202e40.1.2" };
+    const result = setupInstallFailure("integrity", {
+      platform: "linux",
+      launcherDigestMismatch: forged,
+    });
+    if (result.status !== "failed") throw new Error("expected failure");
+    expect(result.launcherDigestMismatch).toEqual(forged);
+    expect(result.remediation).toContain("release 2.1.040.1.2;");
+    expect(
+      [...result.remediation].some((c) =>
+        /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/u.test(c),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps the generic recovery for an integrity failure without package facts", () => {
+    expect(setupInstallFailure("integrity", { platform: "linux" })).toEqual({
+      status: "failed",
+      code: "integrity_mismatch",
+      remediation:
+        "The Hopper download failed integrity verification. Retry setup; if it repeats, update REA before installing.",
+    });
+  });
+});
