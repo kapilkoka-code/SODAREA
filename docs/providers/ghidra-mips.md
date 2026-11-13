@@ -8,6 +8,32 @@ PSP/Allegrex has a [separate static-ELF profile](ghidra-psp.md) tracked in
 
 ## Admission boundary
 
+After building, `node scripts/verify-real-ghidra-mips-boundaries.mjs` checks both
+byte orders through production CLI/MCP. GNU readelf independently decodes the
+soft-float attribute fixture. The receipt records the selected readelf command,
+observed version, and raw attribute output for each byte order. Declared-o32
+MIPS I and unsupported GNU soft-float inputs are refused, while recordless MIPS I
+and MIPS32 controls produce real Ghidra dossiers and exact loaded bytes. The
+receipt preserves the checked CLI and MCP diagnostics for both refusals. The
+verifier checks the imported `MIPS:LE:32:default` and `MIPS:BE:32:default`
+language IDs through `inspect_native_load_image` and records the observed ID
+for each control.
+It checks each public dossier against the exact MIPS ELF fixture digest,
+canonical source path, and entry address. It verifies that its Evidence commits
+the active Ghidra profile and checks the Ghidra version, support lane, and
+inferred o32 ABI basis. The receipt preserves both recordless lanes' Evidence
+that o32 is inferred and floating-point ABI semantics remain unverified.
+The MIPS I Evidence must also report the generic decoder's instruction-subset
+limitation. Load-delay semantics remain unverified. Supply existing Ghidra/Java
+and GNU readelf (`REA_MIPS_READELF`). Source hashes are checked after
+inspection, and no target is executed. Cleanup checks process lineage and an
+independent run-token sweep. The verifier registers each provider run ID from
+`binary_session` before the first analysis call and retains live ownership
+facts after successful analysis. Ghidra uses that session ID as its process
+token, so the sweep can detect a reparented engine even when analysis fails.
+A failed sweep triggers bounded recovery attempts using verified provider
+ownership and retains their outcomes in the diagnostic workspace.
+
 ELF `EM_MIPS` is retained as the provider-neutral `mips` family. The target also
 retains class, byte order, `e_type`, raw `e_flags`, and inspected ABI declarations.
 Recognition does not mean every provider or MIPS variant is supported. Existing
