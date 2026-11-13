@@ -4,7 +4,10 @@ import {
   type NtfsJournalCache,
   type NtfsAcquisition,
 } from "./NtfsJournalCache.js";
-import { ArtifactReaderFailure } from "../../artifacts/ArtifactReader.js";
+import {
+  ArtifactReaderFailure,
+  selectedPathRefusal,
+} from "../../artifacts/ArtifactReader.js";
 import type { ArtifactResourceScope } from "../../artifacts/ArtifactResourceScope.js";
 import {
   artifactFileCancellationCause,
@@ -14,10 +17,7 @@ import {
   readStableArtifact,
   assertStableArtifactState,
 } from "../../artifacts/readStableArtifact.js";
-import {
-  projectStableArtifactFailure,
-  stableArtifactInputRecovery,
-} from "../../artifacts/StableArtifactFailure.js";
+import { projectStableArtifactFailure } from "../../artifacts/StableArtifactFailure.js";
 import {
   primaryAnalysisError,
   type AnalysisError,
@@ -58,12 +58,9 @@ const inputFailure = (
 ) =>
   new AnalysisInputError(
     operation,
-    {
-      cause,
-      ...(cause instanceof ArtifactReaderFailure
-        ? stableArtifactInputRecovery(cause)
-        : {}),
-    },
+    cause instanceof ArtifactReaderFailure
+      ? selectedPathRefusal(cause)
+      : { cause },
     [{ path: [parameter], reason: "invalid_format", message }],
   );
 

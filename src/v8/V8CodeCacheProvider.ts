@@ -1,5 +1,8 @@
 import { ArtifactResourceScope } from "../artifacts/ArtifactResourceScope.js";
-import { ArtifactReaderFailure } from "../artifacts/ArtifactReader.js";
+import {
+  ArtifactReaderFailure,
+  selectedPathRefusal,
+} from "../artifacts/ArtifactReader.js";
 import {
   type StableArtifactSnapshot,
   readStableArtifact,
@@ -13,7 +16,6 @@ import {
 import {
   projectArtifactCloseFailure,
   projectStableArtifactFailure,
-  stableArtifactInputRecovery,
 } from "../artifacts/StableArtifactFailure.js";
 import type { ExecutionOptions } from "../application/AnalysisProvider.js";
 import type { V8CodeCachePort } from "../application/v8CodeCache/V8CodeCachePort.js";
@@ -244,17 +246,13 @@ const v8CodeCacheFailurePrimary = (
       );
     }
     if (cause.reason === "path" || cause.reason === "format")
-      return new AnalysisInputError(
-        OPERATION,
-        { cause, ...stableArtifactInputRecovery(cause) },
-        [
-          {
-            path: ["path"],
-            reason: "invalid_format",
-            message: cause.message,
-          },
-        ],
-      );
+      return new AnalysisInputError(OPERATION, selectedPathRefusal(cause), [
+        {
+          path: ["path"],
+          reason: "invalid_format",
+          message: cause.message,
+        },
+      ]);
   }
   if (cause instanceof Error && "code" in cause) {
     if (cause.code === "EACCES" || cause.code === "EPERM")

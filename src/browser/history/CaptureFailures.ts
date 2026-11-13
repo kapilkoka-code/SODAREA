@@ -1,8 +1,10 @@
 import { captureBudgets } from "./CaptureBudgets.js";
 import { analysisSettingLimit } from "../../domain/analysisSettingDefinitions.js";
 import type { ExecutionOptions } from "../../application/AnalysisProvider.js";
-import { ArtifactReaderFailure } from "../../artifacts/ArtifactReader.js";
-import { stableArtifactInputRecovery } from "../../artifacts/StableArtifactFailure.js";
+import {
+  ArtifactReaderFailure,
+  selectedPathRecovery,
+} from "../../artifacts/ArtifactReader.js";
 import { analysisErrorWithCleanupFailure } from "../../domain/analysisErrorCleanup.js";
 import {
   bindArtifactFileCleanup,
@@ -205,7 +207,7 @@ export const historicalCaptureFailure = (
                 "max_input_bytes",
               ),
             }
-          : stableArtifactInputRecovery(cause)),
+          : selectedPathRecovery(cause)),
       },
       [
         {

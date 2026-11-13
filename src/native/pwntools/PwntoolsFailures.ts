@@ -9,8 +9,10 @@ import {
   bindArtifactFileCleanup,
 } from "../../artifacts/ArtifactFileOperation.js";
 import { completedStableArtifactObservation } from "../../artifacts/StableArtifactObservation.js";
-import { stableArtifactInputRecovery } from "../../artifacts/StableArtifactFailure.js";
-import { ArtifactReaderFailure } from "../../artifacts/ArtifactReader.js";
+import {
+  ArtifactReaderFailure,
+  selectedPathRefusal,
+} from "../../artifacts/ArtifactReader.js";
 import {
   AnalysisError,
   type AnalysisCapturedOutput,
@@ -328,8 +330,7 @@ const classifyPwntoolsDecoderFailure = (
       return new AnalysisInputError(
         context.operation,
         {
-          cause,
-          ...stableArtifactInputRecovery(cause),
+          ...selectedPathRefusal(cause),
           ...(cause.reason === "limit"
             ? {
                 userMessage: `${cause.message} ${pwntoolsInputLimitFact(limits.input_bytes, context.inputBytesSource)} ${budgetRecovery}`,

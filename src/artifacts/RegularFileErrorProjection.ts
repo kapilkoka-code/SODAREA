@@ -1,6 +1,6 @@
 import { BinaryTargetError } from "../domain/configurationErrors.js";
 import { RejectedRegularFileSymlink } from "../filesystem/RegularFile.js";
-import { regularFileSymlinkRecovery } from "./StableArtifactFailure.js";
+import { resolvedPathRetry } from "./ArtifactReader.js";
 
 /** Project a selected-file admission failure without reinterpreting its path. */
 export const selectedFileTargetError = (
@@ -12,6 +12,6 @@ export const selectedFileTargetError = (
     cause,
     ...(primary instanceof RejectedRegularFileSymlink &&
     primary.resolvedPath !== undefined
-      ? { remediationAction: regularFileSymlinkRecovery(primary.resolvedPath) }
+      ? { remediationAction: resolvedPathRetry(primary.resolvedPath) }
       : {}),
   });
