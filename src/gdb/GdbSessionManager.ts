@@ -1,4 +1,8 @@
-import { GDB_PROVIDER_IDENTITY } from "./GdbProviderIdentity.js";
+import {
+  GDB_OBSERVATION_AUTHORITY,
+  GDB_PROVIDER_IDENTITY,
+  GDB_SUBJECT_UNAVAILABLE_REASON,
+} from "./GdbProviderIdentity.js";
 import { persistentDebuggerHostSupported } from "../process/PersistentDebuggerHost.js";
 import { ABORTED, waitForAbortable } from "../process/AbortablePromise.js";
 import { snapshotGdbCommandRecords } from "./GdbCommandRecords.js";
@@ -1143,6 +1147,7 @@ export class GdbSessionManager {
                 ...startupEvidencePayload,
                 records: [...startupEvidencePayload.records],
               },
+              authority: GDB_OBSERVATION_AUTHORITY,
               subjectUnavailableReason:
                 "No usable debugger session became ready during GDB startup.",
               limitations: [
@@ -1350,8 +1355,8 @@ export class GdbSessionManager {
                     : {}),
                   completion_status: result.completion_status,
                 },
-                subjectUnavailableReason:
-                  "The active GDB inferior identity is not established by the debugger session identifier.",
+                authority: GDB_OBSERVATION_AUTHORITY,
+                subjectUnavailableReason: GDB_SUBJECT_UNAVAILABLE_REASON,
                 limitations: [
                   ...(result.mi.length === 0
                     ? [
@@ -1396,8 +1401,8 @@ export class GdbSessionManager {
                   parameters: { session_id: sessionId, command },
                   result: { ...result, records: [...result.records] },
                   rawResult: { ...result, records: [...result.records] },
-                  subjectUnavailableReason:
-                    "The active GDB inferior identity is not established by the debugger session identifier.",
+                  authority: GDB_OBSERVATION_AUTHORITY,
+                  subjectUnavailableReason: GDB_SUBJECT_UNAVAILABLE_REASON,
                   limitations: [
                     "GDB exited before returning a correlated MI result record; only records retained for the active command are returned raw.",
                     ...gdbRetainedOutputLimitations(
@@ -1956,8 +1961,8 @@ export class GdbSessionManager {
             },
             result: { ...partial, records: [...partial.records] },
             rawResult: { ...partial, records: [...partial.records] },
-            subjectUnavailableReason:
-              "The active GDB inferior identity is not established by the debugger session identifier.",
+            authority: GDB_OBSERVATION_AUTHORITY,
+            subjectUnavailableReason: GDB_SUBJECT_UNAVAILABLE_REASON,
             limitations: [
               "The GDB MI protocol failed; retained records are partial and command completion is unknown.",
               "The unrestricted GDB console can access local shell, filesystem, network, and target controls.",
@@ -2217,8 +2222,8 @@ export class GdbSessionManager {
           },
           result: { ...partial, records: [...partial.records] },
           rawResult: { ...partial, records: [...partial.records] },
-          subjectUnavailableReason:
-            "The active GDB inferior identity is not established by the debugger session identifier.",
+          authority: GDB_OBSERVATION_AUTHORITY,
+          subjectUnavailableReason: GDB_SUBJECT_UNAVAILABLE_REASON,
           limitations: [
             `The GDB command exceeded its ${String(acceptedDeadline.value)} ms deadline (deadlineExpired). ${debuggerAdmissionRecovery(acceptedDeadline)} Retained MI and stream records are partial and command completion is unknown.`,
             ...gdbRetainedOutputLimitations(partial, acceptedOutput),
@@ -2306,8 +2311,8 @@ export class GdbSessionManager {
           },
           result: { ...partial, records: [...partial.records] },
           rawResult: { ...partial, records: [...partial.records] },
-          subjectUnavailableReason:
-            "The active GDB inferior identity is not established by the debugger session identifier.",
+          authority: GDB_OBSERVATION_AUTHORITY,
+          subjectUnavailableReason: GDB_SUBJECT_UNAVAILABLE_REASON,
           limitations: [
             "The GDB command was cancelled; retained MI records are partial and command completion is unknown.",
             ...gdbRetainedOutputLimitations(partial, acceptedOutput),
